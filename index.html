@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SEO Tools · Treehouse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EEF1EA; --surface:#FFFFFF; --surface-2:#F6F8F3; --ink:#1F261B; --muted:#5B6853; --line:#D6DCCF;
+  --green:#599140; --green-ink:#3E6B2B; --green-soft:#E3EEDB; --focus:#2F6FD6; --on-green:#FFFFFF;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#141812; --surface:#1D221A; --surface-2:#242A20; --ink:#E7ECE1; --muted:#A3AF99; --line:#353D2F;
+    --green:#74B354; --green-ink:#9CD07F; --green-soft:#28361F; --focus:#7FB0FF; --on-green:#0F1A0A;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141812; --surface:#1D221A; --surface-2:#242A20; --ink:#E7ECE1; --muted:#A3AF99; --line:#353D2F;
+  --green:#74B354; --green-ink:#9CD07F; --green-soft:#28361F; --focus:#7FB0FF; --on-green:#0F1A0A;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Figtree,system-ui,-apple-system,"Segoe UI",sans-serif}
+input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+header.top{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:14px;padding:12px clamp(16px,3vw,28px)}
+header.top .mark{width:30px;height:32px;flex:none}
+header.top h1{font-size:17px;font-weight:700;margin:0;letter-spacing:-.01em}
+header.top .sub{color:var(--muted);font-size:13px;margin:0}
+header.top .grow{flex:1;min-width:0}
+
+.wrap{max-width:1120px;margin:0 auto;padding:28px clamp(16px,3vw,28px) 48px}
+.bar{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px;margin-bottom:20px}
+.bar h2{font-size:22px;margin:0;letter-spacing:-.01em}
+.bar p{margin:2px 0 0;color:var(--muted);font-size:14px}
+.search{width:min(320px,100%);border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 12px}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.card{display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;
+  padding:18px;text-decoration:none;color:inherit;transition:border-color .15s,transform .15s,box-shadow .15s}
+a.card:hover{border-color:var(--green);transform:translateY(-1px);box-shadow:0 6px 18px rgba(31,38,27,.08)}
+.card .icon{width:40px;height:40px;border-radius:10px;background:var(--green-soft);color:var(--green-ink);display:grid;place-items:center}
+.card h3{margin:0;font-size:16px;font-weight:700}
+.card p{margin:0;color:var(--muted);font-size:14px;flex:1}
+.card .meta{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted)}
+.tag{background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-weight:600}
+.open{color:var(--green-ink);font-weight:700;font-size:13px}
+.card.add{border-style:dashed;background:transparent}
+.card.add code{background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:12.5px}
+.empty{color:var(--muted);padding:24px 0}
+</style>
+</head>
+<body>
+<header class="top">
+  <svg class="mark" viewBox="0 0 30 32" aria-hidden="true"><path d="M15 2c7 4 11 10 11 16 0 6-5 11-11 11S4 24 4 18C4 12 8 6 15 2z" fill="#599140"/><path d="M15 9v21" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M15 16l-5-4M15 21l6-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>
+  <div class="grow">
+    <h1>SEO tools</h1>
+    <p class="sub">Treehouse internal toolkit</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="bar">
+    <div>
+      <h2>Dashboard</h2>
+      <p id="count">Loading tools…</p>
+    </div>
+    <input class="search" id="q" type="search" placeholder="Search tools" aria-label="Search tools">
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+const ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 14v-3M12 14V8M16 14v-5M8 21h8"/></svg>';
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const grid = document.getElementById('grid'), count = document.getElementById('count'), q = document.getElementById('q');
+let tools = [];
+
+function render() {
+  const term = q.value.trim().toLowerCase();
+  const list = tools.filter(t => !term || (t.name + ' ' + t.description + ' ' + t.category).toLowerCase().includes(term));
+  count.textContent = `${tools.length} tool${tools.length === 1 ? '' : 's'}`;
+  grid.innerHTML = list.map(t => `
+    <a class="card" href="${esc(t.url)}">
+      <div class="icon">${ICON}</div>
+      <h3>${esc(t.name)}</h3>
+      <p>${esc(t.description || 'No description yet.')}</p>
+      <div class="meta"><span class="tag">${esc(t.category)}</span><span class="open">Open →</span></div>
+    </a>`).join('') + (term ? '' : `
+    <div class="card add">
+      <div class="icon">+</div>
+      <h3>Add a tool</h3>
+      <p>Drop a folder into <code>tools/</code> with an <code>index.html</code>. It shows up here on refresh.</p>
+    </div>`);
+  if (term && !list.length) grid.innerHTML = '<p class="empty">No tools match that search.</p>';
+}
+
+q.addEventListener('input', render);
+fetch('/api/tools').then(r => r.json()).then(d => { tools = d; render(); })
+  .catch(() => { count.textContent = 'Could not load tools. Is the server running? (npm start)'; });
+</script>
+</body>
+</html>
