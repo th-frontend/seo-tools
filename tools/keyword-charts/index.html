@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Keyword Charts · Treehouse</title>
+<meta name="description" content="Drop in a keyword ranking export (CSV or Excel) and get position, movement, service and location charts.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#EEF1EA; --surface:#FFFFFF; --surface-2:#F6F8F3; --ink:#1F261B; --muted:#5B6853; --line:#D6DCCF;
+  --green:#599140; --green-ink:#3E6B2B; --green-soft:#E3EEDB; --focus:#2F6FD6; --on-green:#FFFFFF;
+  --grid:#E4E8DF;
+  /* position buckets, best -> worst (ordinal green ramp), plus not ranking */
+  --b1:#234718; --b2:#3E6B2B; --b3:#599140; --b4:#7FB262; --b5:#A7CC8E; --b0:#C9CEC4;
+  /* status */
+  --good:#0ca30c; --critical:#d03b3b; --serious:#ec835a; --new:#2a78d6; --same:#9AA293;
+  /* categorical */
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#6250d6; --s8:#e34948;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#141812; --surface:#1D221A; --surface-2:#242A20; --ink:#E7ECE1; --muted:#A3AF99; --line:#353D2F;
+    --green:#74B354; --green-ink:#9CD07F; --green-soft:#28361F; --focus:#7FB0FF; --on-green:#0F1A0A; --grid:#2C3327;
+    --b1:#C3E3AE; --b2:#9CD07F; --b3:#74B354; --b4:#558F3A; --b5:#3E6B2B; --b0:#4A5244;
+    --new:#3987e5; --same:#7C8574;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141812; --surface:#1D221A; --surface-2:#242A20; --ink:#E7ECE1; --muted:#A3AF99; --line:#353D2F;
+  --green:#74B354; --green-ink:#9CD07F; --green-soft:#28361F; --focus:#7FB0FF; --on-green:#0F1A0A; --grid:#2C3327;
+  --b1:#C3E3AE; --b2:#9CD07F; --b3:#74B354; --b4:#558F3A; --b5:#3E6B2B; --b0:#4A5244;
+  --new:#3987e5; --same:#7C8574;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Figtree,system-ui,-apple-system,"Segoe UI",sans-serif}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+[hidden]{display:none!important}
+
+header.top{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:14px;padding:12px clamp(16px,3vw,28px)}
+header.top .mark{width:30px;height:32px;flex:none}
+header.top h1{font-size:17px;font-weight:700;margin:0;letter-spacing:-.01em}
+header.top .sub{color:var(--muted);font-size:13px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+header.top .grow{flex:1;min-width:0}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:600;font-size:14px;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--green);border-color:var(--green);color:var(--on-green)}
+.btn.small{padding:5px 10px;font-size:13px}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+
+.wrap{max-width:1240px;margin:0 auto;padding:24px clamp(16px,3vw,28px) 56px}
+
+.drop{display:grid;place-items:center;text-align:center;gap:10px;background:var(--surface);border:2px dashed var(--line);
+  border-radius:14px;padding:56px 20px;cursor:pointer;transition:border-color .15s,background .15s}
+.drop.over{border-color:var(--green);background:var(--green-soft)}
+.drop h2{margin:0;font-size:20px}
+.drop p{margin:0;color:var(--muted)}
+.drop .icon{width:52px;height:52px;border-radius:14px;background:var(--green-soft);color:var(--green-ink);display:grid;place-items:center}
+.hint{color:var(--muted);font-size:13px;margin-top:14px}
+.error{color:var(--critical);font-weight:600}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.mapping{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+.mapping label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--muted)}
+.mapping select{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 9px;font-size:14px;font-weight:500;color:var(--ink);width:100%}
+details.cols summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--muted);margin-bottom:12px}
+
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 18px}
+.filters .lbl{font-size:13px;color:var(--muted);font-weight:600;margin-right:4px}
+.chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600;cursor:pointer}
+.chip .sw{width:10px;height:10px;border-radius:3px}
+.chip[aria-pressed="false"]{opacity:.5}
+.chip[aria-pressed="false"] .sw{background:transparent!important;outline:1.5px solid var(--muted)}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.kpi .k{font-size:12.5px;color:var(--muted);font-weight:600}
+.kpi .v{font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi .d{font-size:13px;color:var(--muted);margin-top:2px}
+.kpi .d .up{color:var(--good);font-weight:700}
+.kpi .d .down{color:var(--critical);font-weight:700}
+
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;min-width:0}
+.card.w6{grid-column:span 6}.card.w12{grid-column:span 12}.card.w7{grid-column:span 7}.card.w5{grid-column:span 5}
+@media (max-width:900px){.card.w6,.card.w7,.card.w5{grid-column:span 12}}
+.card h3{margin:0;font-size:15px;font-weight:700}
+.card .cap{margin:2px 0 12px;color:var(--muted);font-size:13px}
+.card .head{display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap}
+.chart{position:relative;height:300px}
+.chart.tall{height:420px}
+
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);padding:5px 11px;font-size:13px;font-weight:600;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--green-soft);color:var(--green-ink)}
+
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--muted);margin:0 0 10px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+.heat-wrap{overflow-x:auto}
+table.heat{border-collapse:separate;border-spacing:2px;font-size:12.5px;width:100%}
+table.heat th{font-weight:600;color:var(--muted);text-align:left;padding:4px 8px;white-space:nowrap}
+table.heat thead th{text-align:center}
+table.heat td{height:30px;min-width:64px;text-align:center;border-radius:4px;font-weight:700;font-variant-numeric:tabular-nums;cursor:default}
+table.heat td.empty{background:var(--surface-2);color:var(--muted);font-weight:500}
+
+.tbl-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px}
+.tbl-bar input,.tbl-bar select{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 10px;font-size:14px}
+.tbl-bar input{width:min(280px,100%)}
+.tbl-scroll{overflow-x:auto}
+table.data{width:100%;border-collapse:collapse;font-size:13.5px}
+table.data th{text-align:left;font-size:12px;color:var(--muted);font-weight:700;padding:8px 10px;border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap;user-select:none}
+table.data th.num,table.data td.num{text-align:right}
+table.data td{padding:7px 10px;border-bottom:1px solid var(--grid);font-variant-numeric:tabular-nums}
+table.data tr:hover td{background:var(--surface-2)}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;white-space:nowrap}
+.pill i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.delta.up{color:var(--good);font-weight:700}.delta.down{color:var(--critical);font-weight:700}
+.more{margin-top:10px;text-align:center}
+
+#tip{position:fixed;z-index:20;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12.5px;border-radius:8px;padding:8px 10px;max-width:280px;box-shadow:0 6px 18px rgba(0,0,0,.2);line-height:1.45}
+#tip b{font-weight:700}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="btn ghost small" href="/" title="All tools">&larr; Tools</a>
+  <svg class="mark" viewBox="0 0 30 32" aria-hidden="true"><path d="M15 2c7 4 11 10 11 16 0 6-5 11-11 11S4 24 4 18C4 12 8 6 15 2z" fill="#599140"/><path d="M15 9v21" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M15 16l-5-4M15 21l6-5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>
+  <div class="grow">
+    <h1>Keyword charts</h1>
+    <p class="sub" id="subline">Drop in a ranking export to chart it.</p>
+  </div>
+  <button class="btn small" id="newBtn" type="button" hidden>Load another file</button>
+  <input type="file" id="file" accept=".csv,.xlsx,.xls,.tsv,.txt" hidden>
+</header>
+
+<div class="wrap">
+  <section id="empty">
+    <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a keyword export file">
+      <div class="icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg></div>
+      <h2>Drop a keyword export here</h2>
+      <p>CSV or Excel (.xlsx). Or click to choose a file.</p>
+      <p class="error" id="err" hidden></p>
+    </div>
+    <p class="hint">Works best with a keyword column, a starting and current position, and optionally a service type or category. Columns are detected automatically and you can change them after loading. Files stay in your browser and are never uploaded.</p>
+  </section>
+
+  <section id="report" hidden>
+    <details class="cols panel" id="colsPanel" style="margin-bottom:16px">
+      <summary>Columns detected: <span id="colsSummary"></span></summary>
+      <div class="mapping" id="mapping"></div>
+    </details>
+
+    <div class="filters" id="filters"></div>
+    <div class="kpis" id="kpis"></div>
+
+    <div class="grid">
+      <div class="card w7">
+        <h3>Position distribution</h3>
+        <p class="cap" id="distCap">How many keywords sit in each ranking band.</p>
+        <div class="legend" id="distLegend"></div>
+        <div class="chart"><canvas id="distChart"></canvas></div>
+      </div>
+      <div class="card w5" data-needs="start">
+        <h3>Movement</h3>
+        <p class="cap">What happened to each keyword between the two dates.</p>
+        <div class="chart"><canvas id="moveChart"></canvas></div>
+      </div>
+
+      <div class="card w12" data-needs="group">
+        <div class="head">
+          <div><h3>Rankings by <span class="groupName">service type</span></h3>
+          <p class="cap">Share of keywords in each ranking band.</p></div>
+          <div class="seg" data-snap="group"><button type="button" data-v="start" aria-pressed="false">Starting</button><button type="button" data-v="cur" aria-pressed="true">Current</button></div>
+        </div>
+        <div class="legend" id="groupLegend"></div>
+        <div class="chart" id="groupBox"><canvas id="groupChart"></canvas></div>
+      </div>
+
+      <div class="card w6" data-needs="start">
+        <h3>Starting vs current position</h3>
+        <p class="cap">Keywords ranked on both dates. Above the line moved up.</p>
+        <div class="legend" id="scatterLegend"></div>
+        <div class="chart tall"><canvas id="scatterChart"></canvas></div>
+      </div>
+      <div class="card w6" data-needs="start">
+        <h3>Biggest movers</h3>
+        <p class="cap">Top gains and drops in positions, among keywords ranked on both dates.</p>
+        <div class="chart tall"><canvas id="moversChart"></canvas></div>
+      </div>
+
+      <div class="card w12" id="heatCard" hidden>
+        <div class="head">
+          <div><h3>Best position by location</h3>
+          <p class="cap">Each cell is the best-ranking keyword for that city<span class="byGroup"> and <span class="groupName">service type</span></span>. Stronger green is better. Hover for detail.</p></div>
+          <div class="seg" data-snap="heat"><button type="button" data-v="start" aria-pressed="false">Starting</button><button type="button" data-v="cur" aria-pressed="true">Current</button></div>
+        </div>
+        <div class="legend" id="heatLegend"></div>
+        <div class="heat-wrap"><table class="heat" id="heat"></table></div>
+      </div>
+
+      <div class="card w12" id="topicCard" hidden>
+        <h3>Topics</h3>
+        <p class="cap">Keywords grouped by their phrase with the location removed.</p>
+        <div class="tbl-scroll"><table class="data" id="topics"></table></div>
+      </div>
+
+      <div class="card w12">
+        <div class="tbl-bar">
+          <div><h3>All keywords</h3><p class="cap" id="tblCap" style="margin:2px 0 0"></p></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input type="search" id="q" placeholder="Search keywords" aria-label="Search keywords">
+            <select id="statusFilter" aria-label="Filter by movement"></select>
+            <button class="btn small" id="csvBtn" type="button">Download CSV</button>
+          </div>
+        </div>
+        <div class="tbl-scroll"><table class="data" id="table"></table></div>
+        <div class="more"><button class="btn small" id="moreBtn" type="button" hidden>Show more</button></div>
+      </div>
+    </div>
+  </section>
+</div>
+<div id="tip" hidden></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = n => n.toLocaleString();
+
+const BUCKETS = [
+  {k:'b1', label:'Top 3', test:p => p <= 3},
+  {k:'b2', label:'4–10', test:p => p <= 10},
+  {k:'b3', label:'11–20', test:p => p <= 20},
+  {k:'b4', label:'21–50', test:p => p <= 50},
+  {k:'b5', label:'51+', test:() => true},
+  {k:'b0', label:'Not ranking', test:null},
+];
+const bucketOf = p => p == null ? 5 : BUCKETS.findIndex(b => b.test && b.test(p));
+
+const STATUS = {
+  up:   {label:'Improved', color:'--good'},
+  down: {label:'Declined', color:'--critical'},
+  same: {label:'Unchanged', color:'--same'},
+  new:  {label:'Newly ranking', color:'--new'},
+  lost: {label:'Lost ranking', color:'--serious'},
+  none: {label:'Not ranking', color:'--b0'},
+};
+const STATUS_ORDER = ['up','new','same','down','lost','none'];
+
+const FIELDS = [
+  {k:'kw', label:'Keyword', re:/keyword|query|search term|^term|phrase/i, required:true},
+  {k:'group', label:'Service / category', re:/service|categor|group|tag|type|segment|folder/i},
+  {k:'start', label:'Starting position', re:/start|previous|prev|old|before|first|initial|baseline/i},
+  {k:'cur', label:'Current position', re:/current|latest|now|position|rank/i},
+  {k:'vol', label:'Search volume', re:/volume|search vol|^sv$|searches/i},
+  {k:'url', label:'Ranking URL', re:/url|landing|page/i},
+];
+
+const S = {
+  raw:null, sheets:{}, sheet:null, headers:[], map:{}, rows:[], off:new Set(),
+  snap:{group:'cur', heat:'cur'}, sort:{k:'cur', dir:1}, limit:100, charts:{}, file:'',
+  labels:{start:'Starting', cur:'Current'},
+};
+
+/* ---------- loading ---------- */
+const drop = $('drop'), fileIn = $('file');
+drop.addEventListener('click', () => fileIn.click());
+drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileIn.click(); } });
+$('newBtn').addEventListener('click', () => fileIn.click());
+fileIn.addEventListener('change', () => { if (fileIn.files[0]) load(fileIn.files[0]); fileIn.value = ''; });
+['dragenter','dragover'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); if (ev === 'drop' || e.target === drop) drop.classList.remove('over'); }));
+document.addEventListener('drop', e => { const f = e.dataTransfer?.files?.[0]; if (f) load(f); });
+
+function showError(msg) {
+  $('report').hidden = true; $('empty').hidden = false;
+  $('err').textContent = msg; $('err').hidden = false;
+}
+
+async function load(file) {
+  $('err').hidden = true;
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array', cellDates:true});
+    S.sheets = {};
+    for (const name of wb.SheetNames) {
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, raw:false, defval:''})
+        .filter(r => r.some(c => String(c).trim() !== ''));
+      if (rows.length > 1) S.sheets[name] = rows;
+    }
+    const names = Object.keys(S.sheets);
+    if (!names.length) return showError('That file has no rows of data.');
+    S.file = file.name;
+    useSheet(names[0]);
+  } catch (err) {
+    console.error(err);
+    showError('Could not read that file. Try saving it as .xlsx or .csv.');
+  }
+}
+
+function useSheet(name) {
+  S.sheet = name;
+  const rows = S.sheets[name];
+  // header row: first row in the first 10 that looks like it names a keyword column
+  let h = rows.slice(0, 10).findIndex(r => r.some(c => FIELDS[0].re.test(String(c))));
+  if (h < 0) h = 0;
+  S.headers = rows[h].map((c, i) => String(c).trim() || `Column ${i + 1}`);
+  S.raw = rows.slice(h + 1);
+  S.map = detect(S.headers);
+  S.off = new Set();
+  S.limit = 100;
+  if (S.map.kw == null) return showError('Could not find a keyword column. The first row should include a header like "Keyword".');
+  build();
+}
+
+function detect(headers) {
+  const map = {}, used = new Set();
+  const take = (k, i) => { map[k] = i; used.add(i); };
+  const find = re => headers.findIndex((h, i) => !used.has(i) && re.test(h));
+  for (const f of FIELDS.filter(f => !['start','cur'].includes(f.k))) {
+    const i = find(f.re); if (i >= 0) take(f.k, i);
+  }
+  const s = find(FIELDS[2].re); if (s >= 0) take('start', s);
+  const c = find(/current|latest|now/i); if (c >= 0) take('cur', c);
+  if (map.cur == null) {
+    // fall back to the last column that mentions position/rank, or two dated rank columns
+    const cand = headers.map((h, i) => i).filter(i => !used.has(i) && /position|rank|pos\b/i.test(headers[i]) && !/trend|change|diff|delta|best|url/i.test(headers[i]));
+    if (cand.length) take('cur', cand[cand.length - 1]);
+    if (map.start == null && cand.length > 1) take('start', cand[0]);
+  }
+  if (map.kw == null && headers.length) map.kw = 0;
+  return map;
+}
+
+const parsePos = v => {
+  const s = String(v ?? '').trim();
+  if (!s || /^(n\/?a|-|—|none|not ranked|>|\+)/i.test(s)) return null;
+  const n = parseFloat(s.replace(/[^\d.]/g, ''));
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+const parseNum = v => { const n = parseFloat(String(v ?? '').replace(/[^\d.]/g, '')); return Number.isFinite(n) ? n : null; };
+
+function build() {
+  const m = S.map;
+  const dateIn = i => (String(S.headers[i] ?? '').match(/\(([^)]+)\)/) || [])[1];
+  S.labels = {start: dateIn(m.start) ? `Starting (${dateIn(m.start)})` : 'Starting', cur: dateIn(m.cur) ? `Current (${dateIn(m.cur)})` : 'Current'};
+  const hasStart = m.start != null;
+  S.rows = S.raw.map(r => {
+    const kw = String(r[m.kw] ?? '').trim();
+    if (!kw) return null;
+    const start = hasStart ? parsePos(r[m.start]) : null;
+    const cur = m.cur != null ? parsePos(r[m.cur]) : null;
+    let status = null, delta = null;
+    if (hasStart) {
+      if (start == null && cur == null) status = 'none';
+      else if (start == null) status = 'new';
+      else if (cur == null) status = 'lost';
+      else { delta = start - cur; status = delta > 0 ? 'up' : delta < 0 ? 'down' : 'same'; }
+    } else status = cur == null ? 'none' : null;
+    return {
+      kw, start, cur, status, delta,
+      group: m.group != null ? (String(r[m.group] ?? '').trim() || 'Uncategorized') : null,
+      vol: m.vol != null ? parseNum(r[m.vol]) : null,
+      url: m.url != null ? String(r[m.url] ?? '').trim() : '',
+    };
+  }).filter(Boolean);
+  splitLocations(S.rows);
+  S.groups = m.group != null ? [...new Set(S.rows.map(r => r.group))].sort() : [];
+
+  $('empty').hidden = true; $('report').hidden = false; $('newBtn').hidden = false;
+  $('subline').textContent = `${S.file}${Object.keys(S.sheets).length > 1 ? ' · ' + S.sheet : ''} · ${fmt(S.rows.length)} keywords`;
+  renderMapping();
+  renderFilters();
+  render();
+}
+
+// "basement waterproofing fort belvoir, va" -> topic "basement waterproofing", city "Fort Belvoir".
+// Picks the split whose city repeats most across the file, then whose topic does.
+function splitLocations(rows) {
+  const parts = rows.map(r => {
+    const mm = r.kw.toLowerCase().match(/^(.+?),\s*([a-z]{2})$/);
+    if (!mm) return null;
+    const words = mm[1].split(/\s+/);
+    return {words, st:mm[2]};
+  });
+  const topicFreq = new Map(), cityFreq = new Map();
+  const bump = (m, k) => m.set(k, (m.get(k) || 0) + 1);
+  parts.forEach(p => { if (!p) return;
+    for (let k = 1; k <= Math.min(3, p.words.length - 1); k++) { bump(topicFreq, p.words.slice(0, -k).join(' ')); bump(cityFreq, p.words.slice(-k).join(' ')); } });
+  const title = s => s.replace(/\b\w/g, c => c.toUpperCase());
+  rows.forEach((r, i) => {
+    const p = parts[i];
+    if (!p || p.words.length < 2) { r.topic = r.kw.toLowerCase(); r.city = null; return; }
+    let best = 1, bestC = -1, bestT = -1;
+    for (let k = 1; k <= Math.min(3, p.words.length - 1); k++) {
+      const c = cityFreq.get(p.words.slice(-k).join(' ')), t = topicFreq.get(p.words.slice(0, -k).join(' '));
+      if (c > bestC || (c === bestC && t > bestT)) { best = k; bestC = c; bestT = t; }
+    }
+    r.topic = p.words.slice(0, -best).join(' ');
+    r.city = title(p.words.slice(-best).join(' ')) + ', ' + p.st.toUpperCase();
+  });
+}
+
+/* ---------- controls ---------- */
+function renderMapping() {
+  const opts = sel => `<option value="">— none —</option>` + S.headers.map((h, i) => `<option value="${i}"${sel === i ? ' selected' : ''}>${esc(h)}</option>`).join('');
+  let html = '';
+  if (Object.keys(S.sheets).length > 1) {
+    html += `<label>Sheet<select id="sheetSel">${Object.keys(S.sheets).map(n => `<option${n === S.sheet ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>`;
+  }
+  html += FIELDS.map(f => `<label>${f.label}<select data-k="${f.k}">${opts(S.map[f.k])}</select></label>`).join('');
+  $('mapping').innerHTML = html;
+  $('mapping').querySelectorAll('select[data-k]').forEach(s => s.addEventListener('change', () => {
+    S.map[s.dataset.k] = s.value === '' ? null : Number(s.value);
+    if (S.map.kw == null) S.map.kw = 0;
+    build();
+  }));
+  $('sheetSel')?.addEventListener('change', e => useSheet(e.target.value));
+  $('colsSummary').textContent = FIELDS.filter(f => S.map[f.k] != null).map(f => `${f.label.split(' /')[0]} = “${S.headers[S.map[f.k]]}”`).join(' · ');
+}
+
+function groupColor(g) { return css(`--s${(S.groups.indexOf(g) % 8) + 1}`); }
+
+function renderFilters() {
+  const el = $('filters');
+  if (!S.groups.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<span class="lbl">${esc(S.headers[S.map.group])}</span>` + S.groups.map(g =>
+    `<button class="chip" type="button" data-g="${esc(g)}" aria-pressed="${!S.off.has(g)}"><i class="sw" style="background:${groupColor(g)}"></i>${esc(g)}</button>`).join('');
+  el.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
+    const g = b.dataset.g;
+    S.off.has(g) ? S.off.delete(g) : S.off.add(g);
+    if (S.off.size === S.groups.length) S.off.delete(g);
+    renderFilters(); S.limit = 100; render();
+  }));
+}
+
+document.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.snap[seg.dataset.snap] = b.dataset.v;
+  seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  render();
+}));
+
+/* ---------- render ---------- */
+const rowsIn = () => S.rows.filter(r => !S.off.has(r.group));
+
+function render() {
+  const rows = rowsIn();
+  const hasStart = S.map.start != null, hasGroup = S.groups.length > 0;
+  document.querySelectorAll('[data-needs="start"]').forEach(e => e.hidden = !hasStart);
+  document.querySelectorAll('[data-needs="group"]').forEach(e => e.hidden = !hasGroup);
+  document.querySelectorAll('.groupName').forEach(e => e.textContent = hasGroup ? S.headers[S.map.group].toLowerCase() : '');
+  document.querySelectorAll('.seg button').forEach(b => { b.hidden = !hasStart; b.textContent = b.dataset.v === 'start' ? 'Starting' : 'Current'; });
+  if (!hasStart) { S.snap.group = S.snap.heat = 'cur'; }
+  renderKpis(rows, hasStart);
+  Chart.defaults.font.family = 'Figtree, system-ui, sans-serif';
+  Chart.defaults.color = css('--muted');
+  Chart.defaults.borderColor = css('--grid');
+  renderDist(rows, hasStart);
+  if (hasStart) { renderMove(rows); renderScatter(rows); renderMovers(rows); }
+  if (hasGroup) renderGroups(rows);
+  renderHeat(rows, hasGroup);
+  renderTopics(rows, hasStart);
+  renderTable(rows, hasStart);
+}
+
+function kpi(k, v, d = '') { return `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div>${d ? `<div class="d">${d}</div>` : ''}</div>`; }
+function deltaTxt(now, then, lowerIsBetter = false) {
+  const diff = now - then;
+  if (!Number.isFinite(diff) || Math.abs(diff) < 0.05) return 'No change';
+  const good = lowerIsBetter ? diff < 0 : diff > 0;
+  const n = Math.abs(diff) % 1 ? Math.abs(diff).toFixed(1) : Math.abs(diff);
+  return `<span class="${good ? 'up' : 'down'}">${diff > 0 ? '▲' : '▼'} ${n}</span> vs ${then % 1 ? then.toFixed(1) : then} at start`;
+}
+
+function stats(rows, key) {
+  const ranked = rows.map(r => r[key]).filter(p => p != null);
+  return {
+    ranked: ranked.length,
+    top3: ranked.filter(p => p <= 3).length,
+    top10: ranked.filter(p => p <= 10).length,
+    avg: ranked.length ? ranked.reduce((a, b) => a + b, 0) / ranked.length : NaN,
+  };
+}
+
+function renderKpis(rows, hasStart) {
+  const c = stats(rows, 'cur'), s = hasStart ? stats(rows, 'start') : null;
+  const count = st => rows.filter(r => r.status === st).length;
+  let html = kpi('Keywords tracked', fmt(rows.length));
+  html += kpi('Ranking now', fmt(c.ranked), s ? deltaTxt(c.ranked, s.ranked) : `${Math.round(c.ranked / rows.length * 100) || 0}% of tracked`);
+  html += kpi('In top 3', fmt(c.top3), s ? deltaTxt(c.top3, s.top3) : '');
+  html += kpi('In top 10', fmt(c.top10), s ? deltaTxt(c.top10, s.top10) : '');
+  html += kpi('Avg position', Number.isFinite(c.avg) ? c.avg.toFixed(1) : '—', s && Number.isFinite(s.avg) && Number.isFinite(c.avg) ? deltaTxt(+c.avg.toFixed(1), +s.avg.toFixed(1), true) : 'Ranking keywords only');
+  if (hasStart) html += kpi('Moved up / down', `<span style="color:var(--good)">${fmt(count('up'))}</span> <span style="color:var(--muted);font-weight:500">/</span> <span style="color:var(--critical)">${fmt(count('down'))}</span>`, `${fmt(count('new'))} new · ${fmt(count('lost'))} lost`);
+  $('kpis').innerHTML = html;
+}
+
+function chart(id, cfg) {
+  S.charts[id]?.destroy();
+  S.charts[id] = new Chart($(id), cfg);
+}
+
+const tooltipBase = () => ({backgroundColor:css('--ink'), titleColor:css('--bg'), bodyColor:css('--bg'), padding:10, cornerRadius:8, boxPadding:4, titleFont:{weight:'700'}});
+
+function legend(el, items) {
+  $(el).innerHTML = items.map(([label, color]) => `<span><i style="background:${color}"></i>${esc(label)}</span>`).join('');
+}
+
+function renderDist(rows, hasStart) {
+  const counts = key => BUCKETS.map((b, i) => rows.filter(r => bucketOf(r[key]) === i).length);
+  const ds = [];
+  if (hasStart) ds.push({label:S.labels.start, data:counts('start'), backgroundColor:css('--b0'), borderRadius:4, borderSkipped:'start', maxBarThickness:34});
+  ds.push({label:S.labels.cur, data:counts('cur'), backgroundColor:css('--green'), borderRadius:4, borderSkipped:'start', maxBarThickness:34});
+  $('distLegend').hidden = !hasStart;
+  if (hasStart) legend('distLegend', [[S.labels.start, css('--b0')], [S.labels.cur, css('--green')]]);
+  $('distCap').textContent = hasStart ? 'How many keywords sit in each ranking band, then and now.' : 'How many keywords sit in each ranking band.';
+  chart('distChart', {
+    type:'bar', data:{labels:BUCKETS.map(b => b.label), datasets:ds},
+    options:{maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{...tooltipBase(), callbacks:{label:c => ` ${c.dataset.label}: ${fmt(c.raw)} keywords`}}},
+      scales:{x:{grid:{display:false}}, y:{beginAtZero:true, ticks:{precision:0}, border:{display:false}}},
+      datasets:{bar:{categoryPercentage:.7, barPercentage:.9}}},
+  });
+}
+
+function renderMove(rows) {
+  const keys = STATUS_ORDER.filter(k => rows.some(r => r.status === k));
+  const data = keys.map(k => rows.filter(r => r.status === k).length);
+  chart('moveChart', {
+    type:'bar', data:{labels:keys.map(k => STATUS[k].label), datasets:[{data, backgroundColor:keys.map(k => css(STATUS[k].color)), borderRadius:4, borderSkipped:'start', maxBarThickness:26}]},
+    options:{indexAxis:'y', maintainAspectRatio:false, layout:{padding:{right:36}},
+      plugins:{legend:{display:false}, tooltip:{...tooltipBase(), callbacks:{label:c => ` ${fmt(c.raw)} keywords (${Math.round(c.raw / rows.length * 100)}%)`}}},
+      scales:{x:{beginAtZero:true, ticks:{precision:0}, border:{display:false}}, y:{grid:{display:false}, ticks:{color:css('--ink'), font:{weight:'600'}}}}},
+    plugins:[endLabels(c => fmt(c))],
+  });
+}
+
+// draws the value just past the end of each horizontal bar
+function endLabels(f) {
+  return {id:'endLabels', afterDatasetsDraw(ch) {
+    const {ctx} = ch; ctx.save();
+    ctx.font = '600 12px Figtree, system-ui, sans-serif'; ctx.fillStyle = css('--muted'); ctx.textBaseline = 'middle';
+    ch.getDatasetMeta(0).data.forEach((bar, i) => {
+      const v = ch.data.datasets[0].data[i];
+      ctx.textAlign = v < 0 ? 'right' : 'left';
+      ctx.fillText(f(v), bar.x + (v < 0 ? -6 : 6), bar.y);
+    });
+    ctx.restore();
+  }};
+}
+
+function renderGroups(rows) {
+  const key = S.snap.group;
+  const groups = S.groups.filter(g => !S.off.has(g));
+  const totals = groups.map(g => rows.filter(r => r.group === g).length);
+  const ds = BUCKETS.map((b, bi) => ({
+    label:b.label,
+    data:groups.map((g, gi) => { const n = rows.filter(r => r.group === g && bucketOf(r[key]) === bi).length; return totals[gi] ? n / totals[gi] * 100 : 0; }),
+    counts:groups.map(g => rows.filter(r => r.group === g && bucketOf(r[key]) === bi).length),
+    backgroundColor:css('--' + b.k), borderColor:css('--surface'), borderWidth:{left:0, right:2, top:0, bottom:0}, borderSkipped:false, maxBarThickness:30,
+  }));
+  legend('groupLegend', BUCKETS.map(b => [b.label, css('--' + b.k)]));
+  $('groupBox').style.height = Math.max(160, groups.length * 52 + 50) + 'px';
+  chart('groupChart', {
+    type:'bar', data:{labels:groups, datasets:ds},
+    options:{indexAxis:'y', maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{...tooltipBase(), callbacks:{
+        title:c => `${c[0].label} · ${key === 'start' ? S.labels.start : S.labels.cur}`,
+        label:c => ` ${c.dataset.label}: ${fmt(c.dataset.counts[c.dataIndex])} (${c.raw.toFixed(0)}%)`}}},
+      scales:{x:{stacked:true, max:100, ticks:{callback:v => v + '%'}, border:{display:false}}, y:{stacked:true, grid:{display:false}, ticks:{color:css('--ink'), font:{weight:'600'}}}}},
+  });
+}
+
+function renderScatter(rows) {
+  const both = rows.filter(r => r.start != null && r.cur != null);
+  const max = Math.max(10, ...both.map(r => Math.max(r.start, r.cur)));
+  const lim = Math.ceil(max / 10) * 10;
+  const groups = [['up', 'Moved up'], ['same', 'Unchanged'], ['down', 'Moved down']];
+  const ds = groups.map(([k, label]) => ({
+    type:'scatter', label, data:both.filter(r => r.status === k).map(r => ({x:r.start, y:r.cur, r})),
+    backgroundColor:css(STATUS[k].color), borderColor:css('--surface'), borderWidth:1.5, pointRadius:5, pointHoverRadius:7, pointHitRadius:8,
+  }));
+  ds.unshift({type:'line', label:'No change', data:[{x:1, y:1}, {x:lim, y:lim}], borderColor:css('--line'), borderWidth:2, borderDash:[5, 4], pointRadius:0, pointHitRadius:0});
+  legend('scatterLegend', groups.map(([k, label]) => [label, css(STATUS[k].color)]));
+  chart('scatterChart', {
+    data:{datasets:ds},
+    options:{maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{...tooltipBase(), filter:c => c.datasetIndex > 0, callbacks:{
+      title:c => c[0].raw.r.kw, label:c => ` ${c.raw.x} → ${c.raw.y}${c.raw.r.delta ? ` (${c.raw.r.delta > 0 ? '+' : ''}${c.raw.r.delta})` : ''}`}}},
+      scales:{x:{type:'linear', min:1, max:lim, title:{display:true, text:S.labels.start + ' position'}, border:{display:false}},
+        y:{type:'linear', min:1, max:lim, reverse:true, title:{display:true, text:S.labels.cur + ' position'}, border:{display:false}}}},
+  });
+}
+
+function renderMovers(rows) {
+  const moved = rows.filter(r => r.delta);
+  const up = [...moved].filter(r => r.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 8);
+  const down = [...moved].filter(r => r.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 8).reverse();
+  const list = [...up, ...down];
+  const short = s => s.length > 34 ? s.slice(0, 33) + '…' : s;
+  chart('moversChart', {
+    type:'bar', data:{labels:list.map(r => short(r.kw)), datasets:[{data:list.map(r => r.delta),
+      backgroundColor:list.map(r => css(r.delta > 0 ? '--good' : '--critical')), borderRadius:4, borderSkipped:'start', maxBarThickness:18}]},
+    options:{indexAxis:'y', maintainAspectRatio:false, layout:{padding:{left:24, right:24}},
+      plugins:{legend:{display:false}, tooltip:{...tooltipBase(), callbacks:{title:c => list[c[0].dataIndex].kw,
+        label:c => { const r = list[c.dataIndex]; return ` ${r.start} → ${r.cur} (${r.delta > 0 ? '+' : ''}${r.delta} positions)`; }}}},
+      scales:{x:{ticks:{callback:v => (v > 0 ? '+' : '') + v}, border:{display:false}, grid:{color:c => c.tick.value === 0 ? css('--muted') : css('--grid')}},
+        y:{grid:{display:false}, ticks:{color:css('--ink'), font:{size:11.5}}}}},
+    plugins:[endLabels(v => (v > 0 ? '+' : '') + v)],
+  });
+}
+
+function heatColor(p) {
+  // 1 -> strongest green, 50+ -> faint
+  const t = Math.max(0, Math.min(1, (Math.log(p) / Math.log(50))));
+  const pct = Math.round(92 - t * 72);
+  return {bg:`color-mix(in oklab, var(--green-ink) ${pct}%, var(--surface-2))`, fg:pct > 52 ? 'var(--surface)' : 'var(--ink)'};
+}
+
+function renderHeat(rows, hasGroup) {
+  const cityRows = rows.filter(r => r.city);
+  const cities = [...new Set(cityRows.map(r => r.city))].sort();
+  const card = $('heatCard');
+  card.hidden = cities.length < 3;
+  if (card.hidden) return;
+  const key = S.snap.heat;
+  const cols = hasGroup ? S.groups.filter(g => !S.off.has(g)) : ['All keywords'];
+  card.querySelector('.byGroup').hidden = !hasGroup;
+  const cell = (city, col) => cityRows.filter(r => r.city === city && (!hasGroup || r.group === col));
+  const bestOf = list => list.reduce((b, r) => r[key] != null && (!b || r[key] < b[key]) ? r : b, null);
+  // sort cities by best overall position
+  const scored = cities.map(c => { const b = bestOf(cityRows.filter(r => r.city === c)); return {c, best:b ? b[key] : 999}; })
+    .sort((a, b) => a.best - b.best || a.c.localeCompare(b.c));
+  let html = `<thead><tr><th></th>${cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>`;
+  for (const {c} of scored) {
+    html += `<tr><th scope="row">${esc(c)}</th>`;
+    for (const col of cols) {
+      const list = cell(c, col), b = bestOf(list);
+      const ranked = list.filter(r => r[key] != null).length;
+      const tip = `<b>${esc(c)}</b>${hasGroup ? ' · ' + esc(col) : ''}<br>${ranked} of ${list.length} keywords ranking` + (b ? `<br>Best: #${b[key]} “${esc(b.kw)}”` : '');
+      if (!list.length) html += `<td class="empty" data-tip="${esc(tip)}"></td>`;
+      else if (!b) html += `<td class="empty" data-tip="${esc(tip)}">–</td>`;
+      else { const col2 = heatColor(b[key]); html += `<td style="background:${col2.bg};color:${col2.fg}" data-tip="${esc(tip)}">${b[key]}</td>`; }
+    }
+    html += '</tr>';
+  }
+  $('heat').innerHTML = html + '</tbody>';
+  $('heatLegend').innerHTML = [1, 3, 10, 20, 50].map(p => `<span><i style="background:${heatColor(p).bg}"></i>#${p}</span>`).join('') + `<span><i style="background:var(--surface-2);outline:1px solid var(--line)"></i>Not ranking</span>`;
+}
+
+const tip = $('tip');
+document.addEventListener('mouseover', e => {
+  const td = e.target.closest('[data-tip]');
+  if (!td) { tip.hidden = true; return; }
+  tip.innerHTML = td.dataset.tip; tip.hidden = false;
+});
+document.addEventListener('mousemove', e => {
+  if (tip.hidden) return;
+  const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8);
+  const y = e.clientY + 16 + tip.offsetHeight > innerHeight ? e.clientY - tip.offsetHeight - 10 : e.clientY + 16;
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+});
+
+function renderTopics(rows, hasStart) {
+  const withCity = rows.filter(r => r.city);
+  const card = $('topicCard');
+  const topics = [...new Set(withCity.map(r => r.topic))];
+  card.hidden = topics.length < 2 || topics.length > withCity.length * 0.6;
+  if (card.hidden) return;
+  const data = topics.map(t => {
+    const list = withCity.filter(r => r.topic === t), c = stats(list, 'cur'), s = stats(list, 'start');
+    return {t, n:list.length, c, s, group:list[0].group};
+  }).sort((a, b) => b.c.ranked - a.c.ranked || a.c.avg - b.c.avg || b.n - a.n);
+  const avg = v => Number.isFinite(v) ? v.toFixed(1) : '—';
+  $('topics').innerHTML = `<thead><tr><th>Topic</th>${S.groups.length ? '<th>' + esc(S.headers[S.map.group]) + '</th>' : ''}<th class="num">Keywords</th>${hasStart ? '<th class="num">Ranking at start</th>' : ''}<th class="num">Ranking now</th><th class="num">Top 10 now</th><th class="num">Avg position now</th></tr></thead><tbody>` +
+    data.map(d => `<tr><td><b>${esc(d.t)}</b></td>${S.groups.length ? `<td>${esc(d.group)}</td>` : ''}<td class="num">${d.n}</td>${hasStart ? `<td class="num">${d.s.ranked}</td>` : ''}<td class="num">${d.c.ranked}${hasStart ? ` <span class="delta ${d.c.ranked > d.s.ranked ? 'up' : d.c.ranked < d.s.ranked ? 'down' : ''}">${d.c.ranked !== d.s.ranked ? (d.c.ranked > d.s.ranked ? '▲' : '▼') + Math.abs(d.c.ranked - d.s.ranked) : ''}</span>` : ''}</td><td class="num">${d.c.top10}</td><td class="num">${avg(d.c.avg)}</td></tr>`).join('') + '</tbody>';
+}
+
+/* ---------- table ---------- */
+function tableCols(hasStart) {
+  const cols = [{k:'kw', label:'Keyword'}];
+  if (S.groups.length) cols.push({k:'group', label:S.headers[S.map.group]});
+  if (S.rows.some(r => r.city)) cols.push({k:'city', label:'Location'});
+  if (hasStart) cols.push({k:'start', label:'Start', num:true});
+  cols.push({k:'cur', label:'Current', num:true});
+  if (hasStart) cols.push({k:'delta', label:'Change', num:true}, {k:'status', label:'Movement'});
+  if (S.map.vol != null) cols.push({k:'vol', label:'Volume', num:true});
+  return cols;
+}
+
+function filteredTable(rows) {
+  const term = $('q').value.trim().toLowerCase(), st = $('statusFilter').value;
+  const {k, dir} = S.sort;
+  return rows.filter(r => (!term || r.kw.toLowerCase().includes(term) || (r.city || '').toLowerCase().includes(term)) && (!st || r.status === st))
+    .sort((a, b) => {
+      let x = a[k], y = b[k];
+      if (k === 'status') { x = STATUS_ORDER.indexOf(x); y = STATUS_ORDER.indexOf(y); }
+      if (x == null && y == null) return a.kw.localeCompare(b.kw);
+      if (x == null) return 1; if (y == null) return -1;
+      return (typeof x === 'string' ? x.localeCompare(y) : x - y) * dir || a.kw.localeCompare(b.kw);
+    });
+}
+
+function renderTable(rows, hasStart) {
+  const sf = $('statusFilter'), prev = sf.value;
+  sf.hidden = !hasStart;
+  sf.innerHTML = '<option value="">All movement</option>' + STATUS_ORDER.filter(k => rows.some(r => r.status === k)).map(k => `<option value="${k}">${STATUS[k].label} (${rows.filter(r => r.status === k).length})</option>`).join('');
+  sf.value = [...sf.options].some(o => o.value === prev) ? prev : '';
+  const cols = tableCols(hasStart), list = filteredTable(rows);
+  $('tblCap').textContent = `${fmt(list.length)} of ${fmt(rows.length)} keywords`;
+  const cellHtml = (r, c) => {
+    const v = r[c.k];
+    if (c.k === 'status') return v ? `<span class="pill"><i style="background:var(${STATUS[v].color})"></i>${STATUS[v].label}</span>` : '';
+    if (c.k === 'delta') return v ? `<span class="delta ${v > 0 ? 'up' : 'down'}">${v > 0 ? '▲' : '▼'} ${Math.abs(v)}</span>` : (r.status === 'same' ? '0' : '');
+    if (c.k === 'kw') return r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(v)}</a>` : esc(v);
+    if (v == null) return c.num ? '<span style="color:var(--muted)">–</span>' : '';
+    return esc(typeof v === 'number' ? fmt(v) : v);
+  };
+  $('table').innerHTML = `<thead><tr>${cols.map(c => `<th class="${c.num ? 'num' : ''}" data-k="${c.k}">${esc(c.label)}${S.sort.k === c.k ? (S.sort.dir > 0 ? ' ↑' : ' ↓') : ''}</th>`).join('')}</tr></thead><tbody>` +
+    list.slice(0, S.limit).map(r => `<tr>${cols.map(c => `<td class="${c.num ? 'num' : ''}">${cellHtml(r, c)}</td>`).join('')}</tr>`).join('') + '</tbody>';
+  $('moreBtn').hidden = list.length <= S.limit;
+  $('moreBtn').textContent = `Show more (${fmt(list.length - S.limit)} left)`;
+}
+
+$('table').addEventListener('click', e => {
+  const th = e.target.closest('th[data-k]'); if (!th) return;
+  const k = th.dataset.k;
+  S.sort = {k, dir:S.sort.k === k ? -S.sort.dir : (k === 'delta' ? -1 : 1)};
+  renderTable(rowsIn(), S.map.start != null);
+});
+$('q').addEventListener('input', () => { S.limit = 100; renderTable(rowsIn(), S.map.start != null); });
+$('statusFilter').addEventListener('change', () => { S.limit = 100; renderTable(rowsIn(), S.map.start != null); });
+$('moreBtn').addEventListener('click', () => { S.limit += 200; renderTable(rowsIn(), S.map.start != null); });
+
+$('csvBtn').addEventListener('click', () => {
+  const hasStart = S.map.start != null, cols = tableCols(hasStart);
+  const list = filteredTable(rowsIn());
+  const q = v => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  const lines = [cols.map(c => q(c.label)).join(','), ...list.map(r => cols.map(c => {
+    const v = r[c.k]; return q(c.k === 'status' ? (v ? STATUS[v].label : '') : v == null ? '' : String(v));
+  }).join(','))];
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([lines.join('\n')], {type:'text/csv'}));
+  a.download = S.file.replace(/\.[^.]+$/, '') + '-keywords.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+});
+
+// redraw charts with the right colors when the OS theme changes
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (S.rows.length) { renderFilters(); render(); } });
+</script>
+</body>
+</html>
